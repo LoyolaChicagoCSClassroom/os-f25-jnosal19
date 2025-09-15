@@ -19,11 +19,14 @@ SIZE := $(PREFIX)size
 CONFIGS := -DCONFIG_HEAP_SIZE=4096
 CFLAGS := -ffreestanding -mgeneral-regs-only -mno-mmx -m32 -march=i386 -fno-pie -fno-stack-protector -g3 -Wall 
 
+
 ODIR = obj
 SDIR = src
 
-OBJS = \
+OBJS := \
 	kernel_main.o \
+        terminal.o \
+        rprintf.o \
 
 # Make sure to keep a blank line here after OBJS list
 
