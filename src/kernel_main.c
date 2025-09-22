@@ -4,7 +4,7 @@
 
 #define MULTIBOOT2_HEADER_MAGIC         0xe85250d6
 
-// Multiboot header required for GRUB
+
 const unsigned int multiboot_header[] __attribute__((section(".multiboot"))) = {
     MULTIBOOT2_HEADER_MAGIC,
     0,
@@ -20,7 +20,7 @@ static const char *get_execution_level(void) {
     return "CPL=0 (kernel mode)";
 }
 
-// Main kernel entry point
+
 void main() {
     // Initialize terminal
     terminal_clear();
@@ -44,7 +44,7 @@ void main() {
 
     // Keep kernel running
     while(1) {
-        // Kernel main loop - in a real OS, this would handle scheduling, etc.
+       
         __asm__ __volatile__("hlt");  // Halt until next interrupt
     }
 }
