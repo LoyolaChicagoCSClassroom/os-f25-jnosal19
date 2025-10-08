@@ -27,7 +27,8 @@ OBJS := \
  kernel_main.o \
         terminal.o \
         rprintf.o \
-        keyboard.o \ 
+	interrupt.o \
+ 
 # Make sure to keep a blank line here after OBJS list
 
 OBJ = $(patsubst %,$(ODIR)/%,$(OBJS))

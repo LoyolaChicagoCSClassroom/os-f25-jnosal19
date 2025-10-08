@@ -22,6 +22,9 @@
 #include <stdint.h>
 #include "interrupt.h"
 
+// External reference to putc for printing from interrupt handler
+extern int putc(int data);
+
 struct idt_entry idt_entries[256];
 struct idt_ptr   idt_ptr;
 struct tss_entry tss_ent;
@@ -387,12 +390,31 @@ __attribute__((interrupt)) void pit_handler(struct interrupt_frame* frame)
     while(1);
 }
 
+// Helper function to print a hex byte
+static void print_hex_byte_interrupt(uint8_t b) {
+    static const char *hex = "0123456789ABCDEF";
+    putc(hex[(b >> 4) & 0xF]);
+    putc(hex[b & 0xF]);
+}
 
+// Keyboard interrupt handler - IRQ 1 (interrupt 0x21)
 __attribute__((interrupt)) void keyboard_handler(struct interrupt_frame* frame)
 {
-    asm("cli");
-    /* do something */
-    outb(0x20,0x20);
+    // Read the scancode from the PS/2 data port (0x60)
+    uint8_t scancode = inb(0x60);
+    
+    // Print the scancode in hexadecimal format
+    print_hex_byte_interrupt(scancode);
+    putc(' ');
+    
+    // Send End-of-Interrupt (EOI) signal to the PIC
+    // This tells the PIC that we're done handling this interrupt
+    // and it can send us more interrupts
+    outb(0x20, 0x20);
+    
+    // Note: We don't need to explicitly disable interrupts (cli) here
+    // because the CPU automatically disables interrupts when entering
+    // an interrupt handler. They will be re-enabled when we return (iret).
 }
 
 
@@ -481,5 +503,3 @@ void remap_pic(void)
     /* Initialization finished */
     outb(0x21, 0xfd); // Enable keyboard interrupts
 }
-
-

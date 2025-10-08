@@ -1,37 +1,35 @@
 #include <stdint.h>
 #include "interrupt.h"
-#include "terminal.h"   // brings in: int putc(int data);
-
-// If you prefer, you can put this prototype in interrupt.h (see step B)
-extern uint8_t inb(uint16_t port);
+#include "terminal.h"
 
 // tiny printf for banners
-static void printf(const char *s) { while (*s) putc((unsigned char)*s++); }
-
-static void print_hex_byte(uint8_t b) {
-    static const char *hex = "0123456789ABCDEF";
-    putc(hex[(b >> 4) & 0xF]);
-    putc(hex[b & 0xF]);
+static void printf(const char *s) { 
+    while (*s) putc((unsigned char)*s++); 
 }
 
 void kernel_main() {
-    remap_pic();
-    load_gdt();
-    init_idt();
-
-    // harmless even while polling
+    // Initialize the terminal
+    terminal_clear();
+    
+    // Set up interrupt infrastructure
+    remap_pic();      // Configure the Programmable Interrupt Controller
+    load_gdt();       // Load the Global Descriptor Table
+    init_idt();       // Initialize the Interrupt Descriptor Table
+    
+    // Enable keyboard interrupts (IRQ 1)
     IRQ_clear_mask(1);
-
+    
+    // Enable interrupts globally
+    __asm__ __volatile__("sti");
+    
+    // Print banner
     printf("Keyboard Driver Initialized\n");
-    printf("Polling for scancodes (port 0x60)...\n\n");
-
+    printf("Interrupt-driven mode enabled.\n");
+    printf("Press keys to see scancodes:\n\n");
+    
+    // Main loop - just wait for interrupts
+    // The keyboard_handler will be called automatically when keys are pressed
     while (1) {
-        uint8_t status = inb(0x64);      // PS/2 status register
-        if (status & 0x01) {             // output buffer has data
-            uint8_t sc = inb(0x60);      // read scancode
-            print_hex_byte(sc);
-            putc(' ');
-        }
-        __asm__ __volatile__("nop");
+        __asm__ __volatile__("hlt");  // Halt until next interrupt
     }
 }
