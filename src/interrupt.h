@@ -156,3 +156,4 @@ void tss_flush (uint16_t tss);
 void load_gdt();
 void remap_pic(void);
 #endif
+uint8_t inb(uint16_t _port);
