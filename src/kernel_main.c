@@ -1,9 +1,16 @@
 #include <stdint.h>
 #include "interrupt.h"
+#include "terminal.h"
 
 #define VGA_WIDTH 80
 #define VGA_HEIGHT 25
 #define VGA_ADDRESS 0xB8000
+
+static void print_hex_byte(uint8_t b) {
+    const char *hex = "0123456789ABCDEF";
+    putc(hex[(b >> 4) & 0xF]);
+    putc(hex[b & 0xF]);
+}
 
 // VGA text buffer starts at physical memory address 0xB8000.
 // Each entry is a 16-bit value: high byte = color attributes, low byte = ASCII character.
@@ -56,24 +63,30 @@ extern void putc(int c);
  * and prints startup messages to the VGA display.
  * The CPU then halts until an interrupt occurs.
  */
+
 void kernel_main() {
     // Initialize interrupt controllers and descriptor tables
     remap_pic();
     load_gdt();
     init_idt();
 
-    // Unmask keyboard interrupt line (IRQ1)
+    // Unmask keyboard interrupt line (IRQ1) — harmless to leave on even for polling
     IRQ_clear_mask(1);
 
-    // Print boot messages to the screen
+    // Print boot messages
     printf("Keyboard Driver Initialized\n");
-    printf("Start typing...\n\n");
+    printf("Polling for scancodes (port 0x60)...\n\n");
 
-    // Enable interrupts
-    asm("sti");
-
-    // Main loop: halt CPU until next interrupt
+    // P O L L I N G   L O O P  (per deliverables)
+    // Read PS/2 status at 0x64; if LSB set, read scancode at 0x60 and print it.
     while (1) {
-        asm("hlt");
+        uint8_t status = inb(0x64);             // PS/2 status register
+        if (status & 0x01) {                     // LSB (OS bit) means output buffer has data
+            uint8_t sc = inb(0x60);              // read scancode
+            print_hex_byte(sc);
+            putc(' ');
+        }
+        // Optional: tiny pause to avoid pegging CPU (NOP or just continue)
+        asm volatile ("nop");
     }
 }

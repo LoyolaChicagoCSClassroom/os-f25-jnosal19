@@ -39,6 +39,12 @@ void outb (uint16_t _port, uint8_t val) {
 
 uint8_t inb (uint16_t _port);
 
+uint8_t inb (uint16_t _port) {
+    uint8_t rv;
+    __asm__ __volatile__ ("inb %1, %0" : "=a" (rv) : "dN" (_port));
+    return rv;
+}
+
 
 void memset(char *s, char c, unsigned int n) {
     for(int k = 0; k < n ; k++) {
