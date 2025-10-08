@@ -1,50 +1,79 @@
 #include <stdint.h>
-#include "terminal.h"
-#include "rprintf.h"
+#include "interrupt.h"
 
-#define MULTIBOOT2_HEADER_MAGIC         0xe85250d6
+#define VGA_WIDTH 80
+#define VGA_HEIGHT 25
+#define VGA_ADDRESS 0xB8000
 
+// VGA text buffer starts at physical memory address 0xB8000.
+// Each entry is a 16-bit value: high byte = color attributes, low byte = ASCII character.
+static uint16_t *vga_buffer = (uint16_t *)VGA_ADDRESS;
 
-const unsigned int multiboot_header[] __attribute__((section(".multiboot"))) = {
-    MULTIBOOT2_HEADER_MAGIC,
-    0,
-    16,
-    -(16 + MULTIBOOT2_HEADER_MAGIC),
-    0,
-    12
-};
+// Tracks the current cursor position (0 = top-left corner).
+static uint16_t cursor_pos = 0;
 
-// Function to determine current execution level
-static const char *get_execution_level(void) {
-    // In kernel mode on i386, we're at privilege level 0
-    return "CPL=0 (kernel mode)";
-}
-
-
-void main() {
-    // Initialize terminal
-    terminal_clear();
-    terminal_set_color(0x07);  // Light gray on black
-
-    // Print hello message using esp_printf from rprintf.c
-    esp_printf(putc, "Hello from my kernel!\r\n");
-
-    // Print current execution level (requirement #2)
-    esp_printf(putc, "Current execution level: %s\r\n", get_execution_level());
-
-    // Test basic functionality
-    esp_printf(putc, "Testing putc function...\r\n");
-    esp_printf(putc, "Character: %c, Number: %d, Hex: %x\r\n", 'A', 42, 255);
-
-    // Test scrolling functionality (requirement #3)
-    esp_printf(putc, "Testing scroll functionality:\r\n");
-    for (int i = 0; i < 30; i++) {
-        esp_printf(putc, "Line %d: This line should scroll when we exceed 25 rows\r\n", i);
+/**
+ * putc - writes a single character to the VGA text buffer.
+ * @c: character to write
+ *
+ * Handles newlines by moving to the start of the next line.
+ * Characters are printed in light gray on black (attribute 0x07).
+ * If the screen fills up, the cursor wraps back to the top.
+ */
+void putc(int c) {
+    if (c == '\n') {
+        // Move cursor to start of next line
+        cursor_pos = (cursor_pos / VGA_WIDTH + 1) * VGA_WIDTH;
+    } else {
+        // Write character and increment cursor
+        vga_buffer[cursor_pos++] = (0x07 << 8) | (uint8_t)c;
     }
 
-    // Keep kernel running
-    while(1) {
-       
-        __asm__ __volatile__("hlt");  // Halt until next interrupt
+    // Wrap around if end of screen is reached
+    if (cursor_pos >= VGA_WIDTH * VGA_HEIGHT) {
+        cursor_pos = 0;
+    }
+}
+
+/**
+ * printf - prints a null-terminated string to the VGA text buffer.
+ * @str: pointer to the string to print
+ */
+void printf(const char *str) {
+    while (*str) {
+        putc(*str++);
+    }
+}
+
+// External declarations
+extern unsigned char keyboard_map[128];
+extern void putc(int c);
+
+/**
+ * kernel_main - entry point for the kernel after bootloader handoff.
+ *
+ * Initializes system interrupts, enables the keyboard,
+ * and prints startup messages to the VGA display.
+ * The CPU then halts until an interrupt occurs.
+ */
+void kernel_main() {
+    // Initialize interrupt controllers and descriptor tables
+    remap_pic();
+    load_gdt();
+    init_idt();
+
+    // Unmask keyboard interrupt line (IRQ1)
+    IRQ_clear_mask(1);
+
+    // Print boot messages to the screen
+    printf("Keyboard Driver Initialized\n");
+    printf("Start typing...\n\n");
+
+    // Enable interrupts
+    asm("sti");
+
+    // Main loop: halt CPU until next interrupt
+    while (1) {
+        asm("hlt");
     }
 }

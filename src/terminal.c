@@ -39,17 +39,18 @@ void terminal_set_color(uint8_t attr) {
     term_attr = attr;
 }
 
-
-void putc(int data) {
+int putc(int data) {
     char ch = (char)(data & 0xFF);
 
-    if (ch == '\n') { cursor_col = 0; cursor_row++; scroll_if_needed(); return; }
-    if (ch == '\r') { cursor_col = 0; return; }
+    if (ch == '\n') { cursor_col = 0; cursor_row++; scroll_if_needed(); return 0; }
+    if (ch == '\r') { cursor_col = 0; return 0; }
     if (ch == '\t') {
         // 4-space tabs
         uint16_t next = (cursor_col + 4) & ~(4 - 1);
-        while (cursor_col < next) putc(' ');
-        return;
+        while (cursor_col < next) {
+            putc(' ');
+        }
+        return 0;
     }
 
     VGA_MEM[cursor_row * VGA_COLS + cursor_col] = make_cell(ch, term_attr);
@@ -59,4 +60,5 @@ void putc(int data) {
         cursor_row++;
         scroll_if_needed();
     }
+    return 0;
 }
