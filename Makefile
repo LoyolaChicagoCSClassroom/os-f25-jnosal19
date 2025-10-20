@@ -27,8 +27,8 @@ OBJS := \
  kernel_main.o \
         terminal.o \
         rprintf.o \
-	    interrupt.o \
-	    page.o \ 
+	interrupt.o \
+	page.o  
  
 # Make sure to keep a blank line here after OBJS list
 

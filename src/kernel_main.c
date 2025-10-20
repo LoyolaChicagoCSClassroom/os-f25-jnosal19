@@ -2,6 +2,7 @@
 #include "interrupt.h"
 #include "terminal.h"
 #include "page.h"
+#include "rprintf.h"
 
 void test_page_allocator(void) {
     // Initialize the page frame allocator
