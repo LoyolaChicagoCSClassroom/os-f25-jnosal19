@@ -47,7 +47,7 @@ static void printf(const char *s) {
     while (*s) putc((unsigned char)*s++); 
 }
 
-void kernel_main() {
+void main() {
     // Initialize the terminal
     terminal_clear();
     
