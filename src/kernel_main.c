@@ -56,6 +56,9 @@ void main() {
     load_gdt();       // Load the Global Descriptor Table
     init_idt();       // Initialize the Interrupt Descriptor Table
     
+    // Enable paging BEFORE enabling interrupts
+    enable_paging();
+
     // Enable keyboard interrupts (IRQ 1)
     IRQ_clear_mask(1);
     

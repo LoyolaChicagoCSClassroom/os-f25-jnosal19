@@ -80,3 +80,115 @@ void print_pfa_state(void) {
     }
     esp_printf(putc, "(end of free list)\n");
 }
+
+void *map_pages(void *vaddr, struct ppage *pglist, struct page_directory_entry *pd) {
+    struct ppage *current_page = pglist;
+    uint32_t virt_addr = (uint32_t)vaddr;
+    
+    // Iterate through each page in the list
+    while (current_page != NULL) {
+        // Extract page directory index (bits 31-22)
+        uint32_t pd_index = virt_addr >> 22;
+        
+        // Extract page table index (bits 21-12)
+        uint32_t pt_index = (virt_addr >> 12) & 0x3FF;
+        
+        // Check if page directory entry exists
+        if (!pd[pd_index].present) {
+            // Set up page directory entry to point to our page table
+            pd[pd_index].present = 1;
+            pd[pd_index].rw = 1;
+            pd[pd_index].user = 0;  
+            pd[pd_index].writethru = 0;
+            pd[pd_index].cachedisabled = 0;
+            pd[pd_index].accessed = 0;
+            pd[pd_index].pagesize = 0;  // 4KB pages
+            pd[pd_index].ignored = 0;
+            pd[pd_index].os_specific = 0;
+            // Point to page table (physical address >> 12)
+            pd[pd_index].frame = ((uint32_t)pt) >> 12;
+        }
+        
+        // Set up page table entry
+        pt[pt_index].present = 1;
+        pt[pt_index].rw = 1;
+        pt[pt_index].user = 0; 
+        pt[pt_index].accessed = 0;
+        pt[pt_index].dirty = 0;
+        pt[pt_index].unused = 0;
+        // Set physical address (physical address >> 12)
+        pt[pt_index].frame = ((uint32_t)current_page->physical_addr) >> 12;
+        
+        // Move to next page
+        current_page = current_page->next;
+        virt_addr += 4096;  // Move to next 4KB page
+    }
+    
+    return vaddr;
+}
+
+void enable_paging(void) {
+    extern struct page_directory_entry pd[];
+    extern char _end_kernel;
+    
+    // Initialize page directory to all zeros
+    for (int i = 0; i < 1024; i++) {
+        pd[i].present = 0;
+    }
+    
+    // Identity map kernel from 0x100000 to _end_kernel
+    uint32_t kernel_start = 0x100000;
+    uint32_t kernel_end = (uint32_t)&_end_kernel;
+    
+    // Round up to nearest page boundary
+    kernel_end = (kernel_end + 4095) & ~4095;
+    
+    esp_printf(putc, "Mapping kernel from %x to %x\n", kernel_start, kernel_end);
+    
+    // Map each page of the kernel
+    for (uint32_t addr = kernel_start; addr < kernel_end; addr += 4096) {
+        struct ppage tmp;
+        tmp.next = NULL;
+        tmp.prev = NULL;
+        tmp.physical_addr = (void *)addr;
+        map_pages((void *)addr, &tmp, pd);
+    }
+    
+    // Identity map the stack
+    uint32_t esp;
+    __asm__ __volatile__("mov %%esp, %0" : "=r"(esp));
+    
+    // Round down to page boundary
+    uint32_t stack_page = esp & ~4095;
+    esp_printf(putc, "Mapping stack at %x\n", stack_page);
+    
+    struct ppage stack_tmp;
+    stack_tmp.next = NULL;
+    stack_tmp.prev = NULL;
+    stack_tmp.physical_addr = (void *)stack_page;
+    map_pages((void *)stack_page, &stack_tmp, pd);
+    
+    // Identity map video memory at 0xB8000
+    esp_printf(putc, "Mapping video memory at %x\n", 0xB8000);
+    struct ppage video_tmp;
+    video_tmp.next = NULL;
+    video_tmp.prev = NULL;
+    video_tmp.physical_addr = (void *)0xB8000;
+    map_pages((void *)0xB8000, &video_tmp, pd);
+    
+    // Load page directory into CR3
+    __asm__ __volatile__("mov %0, %%cr3" : : "r"(pd));
+    
+    // Enable paging by setting bit 31 and bit 0 of CR0
+    __asm__ __volatile__(
+        "mov %%cr0, %%eax\n"
+        "or $0x80000001, %%eax\n"
+        "mov %%eax, %%cr0"
+        : : : "eax"
+    );
+    
+    esp_printf(putc, "Paging enabled!\n");
+}
+
+struct page_directory_entry pd[1024] __attribute__((aligned(4096)));
+struct page pt[1024] __attribute__((aligned(4096)));
