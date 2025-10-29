@@ -1,6 +1,8 @@
 #include "page.h"
 #include "rprintf.h"
 
+extern struct page pt[1024];
+
 // Static array of physical page structures
 static struct ppage physical_page_array[NUM_PHYSICAL_PAGES];
 
