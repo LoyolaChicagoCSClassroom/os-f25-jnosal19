@@ -4,6 +4,11 @@
 #include "page.h"
 #include "rprintf.h"
 
+#define MULTIBOOT2_HEADER_MAGIC         0xe85250d6
+
+const unsigned int multiboot_header[]  __attribute__((section(".multiboot"))) = {MULTIBOOT2_HEADER_MAGIC, 0, 16, -(16+MULTIBOOT2_HEADER_MAGIC), 0, 12};
+
+
 void test_page_allocator(void) {
     // Initialize the page frame allocator
     init_pfa_list();
