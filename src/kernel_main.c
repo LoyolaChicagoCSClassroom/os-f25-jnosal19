@@ -8,7 +8,6 @@
 
 const unsigned int multiboot_header[]  __attribute__((section(".multiboot"))) = {MULTIBOOT2_HEADER_MAGIC, 0, 16, -(16+MULTIBOOT2_HEADER_MAGIC), 0, 12};
 
-
 void test_page_allocator(void) {
     // Initialize the page frame allocator
     init_pfa_list();
@@ -52,31 +51,48 @@ static void printf(const char *s) {
     while (*s) putc((unsigned char)*s++); 
 }
 
+// Forward declaration
+void init_keyboard(void);
+
 void main() {
+    // Disable interrupts immediately
+    __asm__ __volatile__("cli");
+    
     // Initialize the terminal
     terminal_clear();
 
     // Test the page frame allocator FIRST
     test_page_allocator();
 
-    // Set up interrupt infrastructure
+    // Set up interrupt infrastructure (but don't enable yet)
     remap_pic();
     load_gdt();
     init_idt();
 
     // Enable paging BEFORE enabling interrupts
     enable_paging();
+    
+    // IMPORTANT: Small delay to let paging stabilize
+    for (volatile int i = 0; i < 10000; i++);
 
-    // Enable keyboard interrupts (IRQ 1)
-    IRQ_clear_mask(1);
-
-    // Enable interrupts globally
-    __asm__ __volatile__("sti");
-
-    // Print banner
+    // Print banner AFTER paging is enabled
     printf("\nKeyboard Driver Initialized\n");
     printf("Interrupt-driven mode enabled.\n");
+
+    // Initialize keyboard controller BEFORE enabling interrupts
+    init_keyboard();
+    printf("Keyboard controller initialized.\n");
+    
+    // Enable keyboard interrupts (IRQ 1) at the PIC
+    IRQ_clear_mask(1);
+    
     printf("Press keys to see scancodes:\n\n");
+    
+    // CRITICAL: Delay before enabling interrupts globally
+    for (volatile int i = 0; i < 10000; i++);
+
+    // Enable interrupts globally - LAST step
+    __asm__ __volatile__("sti");
 
     // Main loop
     while (1) {

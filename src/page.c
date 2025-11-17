@@ -50,7 +50,6 @@ struct ppage *allocate_physical_pages(unsigned int npages) {
     return alloc_head;
 }
 
-
 void free_physical_pages(struct ppage *ppage_list) {
     if (!ppage_list)
         return;
@@ -69,7 +68,6 @@ void free_physical_pages(struct ppage *ppage_list) {
     ppage_list->prev = 0;
     free_page_list = ppage_list;
 }
-
 
 extern int putc(int c);  
 
@@ -156,19 +154,23 @@ void enable_paging(void) {
         map_pages((void *)addr, &tmp, pd);
     }
     
-    // Identity map the stack
+    // Identity map the stack - MAP MULTIPLE PAGES for safety
     uint32_t esp;
     __asm__ __volatile__("mov %%esp, %0" : "=r"(esp));
     
-    // Round down to page boundary
-    uint32_t stack_page = esp & ~4095;
-    esp_printf(putc, "Mapping stack at %x\n", stack_page);
+    // Round down to page boundary and map 8 pages (32KB) of stack
+    uint32_t stack_bottom = (esp & ~4095) - (7 * 4096);  // Start 7 pages below
+    esp_printf(putc, "Mapping stack from %x to %x (current ESP: %x)\n", 
+               stack_bottom, stack_bottom + (8 * 4096), esp);
     
-    struct ppage stack_tmp;
-    stack_tmp.next = NULL;
-    stack_tmp.prev = NULL;
-    stack_tmp.physical_addr = (void *)stack_page;
-    map_pages((void *)stack_page, &stack_tmp, pd);
+    for (int i = 0; i < 8; i++) {
+        uint32_t stack_page = stack_bottom + (i * 4096);
+        struct ppage stack_tmp;
+        stack_tmp.next = NULL;
+        stack_tmp.prev = NULL;
+        stack_tmp.physical_addr = (void *)stack_page;
+        map_pages((void *)stack_page, &stack_tmp, pd);
+    }
     
     // Identity map video memory at 0xB8000
     esp_printf(putc, "Mapping video memory at %x\n", 0xB8000);
@@ -178,15 +180,22 @@ void enable_paging(void) {
     video_tmp.physical_addr = (void *)0xB8000;
     map_pages((void *)0xB8000, &video_tmp, pd);
     
-    // Load page directory into CR3
-    __asm__ __volatile__("mov %0, %%cr3" : : "r"(pd));
+    // Flush TLB by reloading CR3
+    __asm__ __volatile__("mov %0, %%cr3" : : "r"(pd) : "memory");
     
     // Enable paging by setting bit 31 and bit 0 of CR0
     __asm__ __volatile__(
         "mov %%cr0, %%eax\n"
         "or $0x80000001, %%eax\n"
-        "mov %%eax, %%cr0"
-        : : : "eax"
+        "mov %%eax, %%cr0\n"
+        : : : "eax", "memory"
+    );
+    
+    // Flush TLB again after enabling paging
+    __asm__ __volatile__(
+        "mov %%cr3, %%eax\n"
+        "mov %%eax, %%cr3\n"
+        : : : "eax", "memory"
     );
     
     esp_printf(putc, "Paging enabled!\n");

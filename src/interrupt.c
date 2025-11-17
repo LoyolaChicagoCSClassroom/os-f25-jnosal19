@@ -503,3 +503,70 @@ void remap_pic(void)
     /* Initialization finished */
     outb(0x21, 0xfd); // Enable keyboard interrupts
 }
+
+// Keyboard controller ports
+#define KBD_DATA_PORT    0x60
+#define KBD_STATUS_PORT  0x64
+#define KBD_COMMAND_PORT 0x64
+
+// Keyboard controller commands
+#define KBD_CMD_READ_CONFIG  0x20
+#define KBD_CMD_WRITE_CONFIG 0x60
+#define KBD_CMD_DISABLE_KB   0xAD
+#define KBD_CMD_ENABLE_KB    0xAE
+#define KBD_CMD_SELF_TEST    0xAA
+
+// Wait for keyboard controller to be ready for input
+static void kbd_wait_input(void) {
+    int timeout = 100000;
+    while (timeout--) {
+        if (!(inb(KBD_STATUS_PORT) & 0x02)) {
+            return;
+        }
+    }
+}
+
+// Wait for keyboard controller to have output ready
+static void kbd_wait_output(void) {
+    int timeout = 100000;
+    while (timeout--) {
+        if (inb(KBD_STATUS_PORT) & 0x01) {
+            return;
+        }
+    }
+}
+
+// Initialize the keyboard controller
+void init_keyboard(void) {
+    // Disable the keyboard while we configure
+    kbd_wait_input();
+    outb(KBD_COMMAND_PORT, KBD_CMD_DISABLE_KB);
+    
+    // Flush the output buffer
+    inb(KBD_DATA_PORT);
+    
+    // Read current configuration
+    kbd_wait_input();
+    outb(KBD_COMMAND_PORT, KBD_CMD_READ_CONFIG);
+    kbd_wait_output();
+    uint8_t config = inb(KBD_DATA_PORT);
+    
+    // Enable keyboard interrupts (bit 0) and translation (bit 6)
+    config |= 0x01;   // Enable keyboard interrupt
+    config &= ~0x10;  // Enable keyboard
+    
+    // Write configuration back
+    kbd_wait_input();
+    outb(KBD_COMMAND_PORT, KBD_CMD_WRITE_CONFIG);
+    kbd_wait_input();
+    outb(KBD_DATA_PORT, config);
+    
+    // Re-enable the keyboard
+    kbd_wait_input();
+    outb(KBD_COMMAND_PORT, KBD_CMD_ENABLE_KB);
+    
+    // Flush any pending data
+    while (inb(KBD_STATUS_PORT) & 0x01) {
+        inb(KBD_DATA_PORT);
+    }
+}
